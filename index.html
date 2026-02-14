@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Full-Stack App (Student Build)</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Your CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="not-authenticated">
+  
+  <!-- Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">Full-Stack App Gabriel Fernandez</a>
+      <div class="ms-auto">
+        <!-- Links visible when NOT logged in -->
+        <a href="#/login" class="nav-link role-logged-out">Login</a>
+        <a href="#/register" class="nav-link role-logged-out">Register</a>
+        
+        <!-- Dropdown visible when logged in -->
+        <div class="dropdown role-logged-in">
+          <a class="btn btn-secondary dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+            Username
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#/profile">Profile</a></li>
+            <li><a class="dropdown-item" href="#/requests">My Requests</a></li>
+            <li><a class="dropdown-item" href="#/logout">Logout</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item role-admin" href="#/employees">Employees</a></li>
+            <li><a class="dropdown-item role-admin" href="#/accounts">Accounts</a></li>
+            <li><a class="dropdown-item role-admin" href="#/departments">Departments</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container mt-4">
+    <section id="home-page" class="page active">
+      <h1>Welcome to Full-Stack App</h1>
+      <p>This is a static prototype before backend integration.</p>
+      <a href="#/register" class="btn btn-primary">Get Started</a>
+    </section>
+
+    <!-- Login Page -->
+    <section id="login-page" class="page">
+      <h2>Login</h2>
+      <form>
+        <input type="email" placeholder="Email" class="form-control mb-2">
+        <input type="password" placeholder="Password" class="form-control mb-2">
+        <button class="btn btn-success">Login</button>
+      </form>
+    </section>
+
+    <!-- Register Page -->
+    <section id="register-page" class="page">
+      <h2>Register</h2>
+      <form>
+        <input type="text" placeholder="First Name" class="form-control mb-2">
+        <input type="text" placeholder="Last Name" class="form-control mb-2">
+        <input type="email" placeholder="Email" class="form-control mb-2">
+        <input type="password" placeholder="Password" class="form-control mb-2">
+        <button class="btn btn-primary">Sign Up</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Bootstrap JS + Your Script -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
