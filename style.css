@@ -1,8 +1,22 @@
-.page { display: none; }
-.page.active { display: block; }
+.page {
+  display: none;
+}
 
-body.not-authenticated .role-logged-in { display: none; }
-body.authenticated .role-logged-out { display: none; }
+.page.active {
+  display: block;
+}
 
-.role-admin { display: none; }
-body.is-admin .role-admin { display: block; }
+.simple-card {
+  max-width: 400px;
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+}
+
+body.not-authenticated .role-logged-in {
+  display: none;
+}
+
+body.authenticated .role-logged-out {
+  display: none;
+}
