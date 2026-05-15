@@ -1,9 +1,9 @@
 // ==================== STORAGE ====================
 const STORAGE_KEY = 'ipt_demo_v1';
 let currentUser = null;
+const API_URL = 'http://localhost:3000';
 
 window.db = {
-  accounts: [],
   departments: [],
   employees: [],
   requests: []
@@ -12,26 +12,24 @@ window.db = {
 function loadFromStorage() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
-    try { window.db = JSON.parse(raw); }
-    catch { seedData(); }
+    try { 
+      const data = JSON.parse(raw);
+      window.db.departments = data.departments || [];
+      window.db.employees = data.employees || [];
+      window.db.requests = data.requests || [];
+    } catch { 
+      seedData(); 
+    }
   } else {
     seedData();
   }
 }
 
 function seedData() {
-  window.db.accounts.push({
-    firstName: 'Admin',
-    lastName: 'User',
-    email: 'admin@example.com',
-    password: 'Password123!',
-    role: 'Admin',
-    verified: true
-  });
-  window.db.departments.push(
+  window.db.departments = [
     { name: 'Engineering', description: 'Software team' },
     { name: 'HR', description: 'Human Resources' }
-  );
+  ];
   saveToStorage();
 }
 
@@ -39,18 +37,23 @@ function saveToStorage() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(window.db));
 }
 
+// ==================== AUTH HELPER ====================
+function getAuthHeader() {
+  const token = sessionStorage.getItem('authToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 // ==================== AUTH ====================
 function setAuthState(isAuth, user) {
   currentUser = user;
   if (isAuth && user) {
-    localStorage.setItem('auth_token', user.email);
-    document.body.className = user.role === 'Admin'
+    document.body.className = user.role === 'admin'
       ? 'authenticated is-admin'
       : 'authenticated';
-    document.getElementById('navUsername').innerText = user.firstName + ' ' + user.lastName;
+    document.getElementById('navUsername').innerText = user.username;
   } else {
     currentUser = null;
-    localStorage.removeItem('auth_token');
+    sessionStorage.removeItem('authToken');
     document.body.className = 'not-authenticated';
     document.getElementById('navUsername').innerText = '';
   }
@@ -73,28 +76,23 @@ function handleRouting() {
   let hash = window.location.hash.replace('#/', '');
   if (!hash) hash = 'home';
 
-  // Redirect unauthenticated users
   if (protectedRoutes.includes(hash) && !currentUser) {
     navigateTo('login');
     return;
   }
 
-  // Redirect non-admins from admin routes
-  if (adminRoutes.includes(hash) && currentUser && currentUser.role !== 'Admin') {
+  if (adminRoutes.includes(hash) && currentUser && currentUser.role !== 'admin') {
     navigateTo('profile');
     showToast('Access denied!', 'danger');
     return;
   }
 
-  // Hide all pages
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
 
-  // Show matching page
   const pageId = hash + '-page';
   const page = document.getElementById(pageId);
   if (page) {
     page.classList.add('active');
-    // Render page data
     if (hash === 'profile') renderProfile();
     if (hash === 'employees') renderEmployeesTable();
     if (hash === 'departments') renderDepartmentsTable();
@@ -108,7 +106,9 @@ function handleRouting() {
 window.addEventListener('hashchange', handleRouting);
 
 // ==================== REGISTER ====================
-function handleRegister() {
+async function handleRegister() {
+  const username = document.getElementById('registerFirstName').value.trim() 
+    + document.getElementById('registerLastName').value.trim();
   const firstName = document.getElementById('registerFirstName').value.trim();
   const lastName = document.getElementById('registerLastName').value.trim();
   const email = document.getElementById('registerEmail').value.trim();
@@ -122,89 +122,133 @@ function handleRegister() {
     errorEl.classList.remove('d-none');
     return;
   }
+
   if (password.length < 6) {
     errorEl.innerText = 'Password must be at least 6 characters!';
     errorEl.classList.remove('d-none');
     return;
   }
-  if (window.db.accounts.some(acc => acc.email === email)) {
-    errorEl.innerText = 'Email already exists!';
-    errorEl.classList.remove('d-none');
-    return;
-  }
 
-  window.db.accounts.push({ firstName, lastName, email, password, role: 'User', verified: false });
-  saveToStorage();
-  localStorage.setItem('unverified_email', email);
-  document.getElementById('verifyEmailDisplay').innerText = email;
-  navigateTo('verify-email');
+  try {
+    const response = await fetch(`${API_URL}/api/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: email, password, role: 'user' })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      // Store extra info in localStorage
+      window.db.accounts = window.db.accounts || [];
+      window.db.accounts.push({ firstName, lastName, email, role: 'user', verified: false });
+      saveToStorage();
+      localStorage.setItem('unverified_email', email);
+      document.getElementById('verifyEmailDisplay').innerText = email;
+      navigateTo('verify-email');
+    } else {
+      errorEl.innerText = data.error || 'Registration failed!';
+      errorEl.classList.remove('d-none');
+    }
+  } catch (err) {
+    errorEl.innerText = 'Network error! Is the backend running?';
+    errorEl.classList.remove('d-none');
+  }
 }
 
 // ==================== VERIFY EMAIL ====================
 function simulateVerify() {
   const email = localStorage.getItem('unverified_email');
-  const acc = window.db.accounts.find(a => a.email === email);
-  if (acc) {
-    acc.verified = true;
-    saveToStorage();
-    showToast('Email verified! You may now log in.', 'success');
-    navigateTo('login');
+  if (window.db.accounts) {
+    const acc = window.db.accounts.find(a => a.email === email);
+    if (acc) {
+      acc.verified = true;
+      saveToStorage();
+    }
   }
+  showToast('Email verified! You may now log in.', 'success');
+  navigateTo('login');
 }
 
 // ==================== LOGIN ====================
-function handleLogin() {
+async function handleLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
   const errorEl = document.getElementById('loginError');
 
   errorEl.classList.add('d-none');
 
-  const user = window.db.accounts.find(acc =>
-    acc.email === email && acc.password === password && acc.verified === true
-  );
+  try {
+    const response = await fetch(`${API_URL}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: email, password })
+    });
 
-  if (!user) {
-    errorEl.innerText = 'Invalid credentials or account not verified!';
+    const data = await response.json();
+
+    if (response.ok) {
+      sessionStorage.setItem('authToken', data.token);
+      setAuthState(true, data.user);
+      showToast('Welcome back, ' + data.user.username + '!', 'success');
+      navigateTo('profile');
+    } else {
+      errorEl.innerText = data.error || 'Invalid credentials!';
+      errorEl.classList.remove('d-none');
+    }
+  } catch (err) {
+    errorEl.innerText = 'Network error! Is the backend running?';
     errorEl.classList.remove('d-none');
-    return;
   }
-
-  setAuthState(true, user);
-  showToast('Welcome back, ' + user.firstName + '!', 'success');
-  navigateTo('profile');
 }
 
 // ==================== PROFILE ====================
-function renderProfile() {
+async function renderProfile() {
   if (!currentUser) return;
-  document.getElementById('profileInfo').innerHTML = `
-    <p><strong>${currentUser.firstName} ${currentUser.lastName}</strong></p>
-    <p><strong>Email:</strong> ${currentUser.email}</p>
-    <p><strong>Role:</strong> ${currentUser.role}</p>
-  `;
+
+  try {
+    const response = await fetch(`${API_URL}/api/profile`, {
+      headers: { 
+        'Content-Type': 'application/json',
+        ...getAuthHeader() 
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      document.getElementById('profileInfo').innerHTML = `
+        <p><strong>Username:</strong> ${data.user.username}</p>
+        <p><strong>Role:</strong> ${data.user.role}</p>
+      `;
+    }
+  } catch (err) {
+    document.getElementById('profileInfo').innerHTML = `
+      <p><strong>Username:</strong> ${currentUser.username}</p>
+      <p><strong>Role:</strong> ${currentUser.role}</p>
+    `;
+  }
 }
 
 // ==================== EMPLOYEES ====================
 function renderEmployeesTable() {
   const tbody = document.getElementById('employeesTable');
-  if (window.db.employees.length === 0) {
+  if (!window.db.employees || window.db.employees.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" class="text-center">No employees.</td></tr>';
     return;
   }
-  tbody.innerHTML = window.db.employees.map((emp, i) => {
-    const dept = window.db.departments.find(d => d.name === emp.dept);
-    return `<tr>
+  tbody.innerHTML = window.db.employees.map((emp, i) => `
+    <tr>
       <td>${emp.empId}</td>
       <td>${emp.email}</td>
       <td>${emp.position}</td>
-      <td>${dept ? dept.name : emp.dept}</td>
+      <td>${emp.dept}</td>
       <td>
         <button class="btn btn-warning btn-sm me-1" onclick="editEmployee(${i})">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteEmployee(${i})">Delete</button>
       </td>
-    </tr>`;
-  }).join('');
+    </tr>
+  `).join('');
 }
 
 function showEmployeeForm() {
@@ -279,7 +323,7 @@ function deleteEmployee(i) {
 // ==================== DEPARTMENTS ====================
 function renderDepartmentsTable() {
   const tbody = document.getElementById('departmentsTable');
-  if (window.db.departments.length === 0) {
+  if (!window.db.departments || window.db.departments.length === 0) {
     tbody.innerHTML = '<tr><td colspan="3" class="text-center">No departments.</td></tr>';
     return;
   }
@@ -351,7 +395,12 @@ function deleteDept(i) {
 // ==================== ACCOUNTS ====================
 function renderAccountsList() {
   const tbody = document.getElementById('accountsTable');
-  tbody.innerHTML = window.db.accounts.map((acc, i) => `
+  const accounts = window.db.accounts || [];
+  if (accounts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">No accounts.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = accounts.map((acc, i) => `
     <tr>
       <td>${acc.firstName} ${acc.lastName}</td>
       <td>${acc.email}</td>
@@ -359,7 +408,6 @@ function renderAccountsList() {
       <td>${acc.verified ? '✅' : '❌'}</td>
       <td>
         <button class="btn btn-warning btn-sm me-1" onclick="editAccount(${i})">Edit</button>
-        <button class="btn btn-info btn-sm me-1" onclick="resetPassword(${i})">Reset Password</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAccount(${i})">Delete</button>
       </td>
     </tr>
@@ -397,14 +445,12 @@ function saveAccount() {
 
   const accData = { firstName, lastName, email, password, role, verified };
 
+  window.db.accounts = window.db.accounts || [];
+
   if (index !== '') {
     window.db.accounts[parseInt(index)] = accData;
     showToast('Account updated!', 'success');
   } else {
-    if (window.db.accounts.some(a => a.email === email)) {
-      showToast('Email already exists!', 'danger');
-      return;
-    }
     window.db.accounts.push(accData);
     showToast('Account added!', 'success');
   }
@@ -426,19 +472,8 @@ function editAccount(i) {
   document.getElementById('accVerified').checked = acc.verified;
 }
 
-function resetPassword(i) {
-  const newPass = prompt('Enter new password (min 6 chars):');
-  if (!newPass || newPass.length < 6) {
-    showToast('Password too short!', 'danger');
-    return;
-  }
-  window.db.accounts[i].password = newPass;
-  saveToStorage();
-  showToast('Password reset!', 'success');
-}
-
 function deleteAccount(i) {
-  if (window.db.accounts[i].email === currentUser.email) {
+  if (window.db.accounts[i].email === currentUser.username) {
     showToast('You cannot delete your own account!', 'danger');
     return;
   }
@@ -453,7 +488,7 @@ function deleteAccount(i) {
 // ==================== REQUESTS ====================
 function renderRequestsTable() {
   if (!currentUser) return;
-  const myRequests = window.db.requests.filter(r => r.employeeEmail === currentUser.email);
+  const myRequests = (window.db.requests || []).filter(r => r.employeeEmail === currentUser.username);
   const tbody = document.getElementById('requestsTable');
   const noMsg = document.getElementById('noRequestsMsg');
   const tableWrapper = document.getElementById('requestsTableWrapper');
@@ -507,12 +542,13 @@ function submitRequest() {
     return;
   }
 
+  window.db.requests = window.db.requests || [];
   window.db.requests.push({
     type,
     items,
     status: 'Pending',
     date: new Date().toLocaleDateString(),
-    employeeEmail: currentUser.email
+    employeeEmail: currentUser.username
   });
 
   saveToStorage();
@@ -535,11 +571,16 @@ function showToast(message, type) {
 document.addEventListener('DOMContentLoaded', () => {
   loadFromStorage();
 
-  // Restore session
-  const token = localStorage.getItem('auth_token');
+  // Restore session from sessionStorage
+  const token = sessionStorage.getItem('authToken');
   if (token) {
-    const user = window.db.accounts.find(a => a.email === token);
-    if (user) setAuthState(true, user);
+    try {
+      // Decode token to get user info (without verifying signature on client)
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setAuthState(true, { username: payload.username, role: payload.role });
+    } catch (e) {
+      sessionStorage.removeItem('authToken');
+    }
   }
 
   if (!window.location.hash) {
